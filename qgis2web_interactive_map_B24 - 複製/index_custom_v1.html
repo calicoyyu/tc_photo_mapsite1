@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>B24 互動地圖 — 自訂檢視</title>
+    <link rel="stylesheet" href="css/leaflet.css">
+    <link rel="stylesheet" href="css/MarkerCluster.css">
+    <link rel="stylesheet" href="css/MarkerCluster.Default.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+            background: #f0f0f0;
+            color: #333;
+            overflow: hidden;
+        }
+
+        /* ===== App Grid Layout ===== */
+        .app-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 340px;
+            grid-template-rows: 100vh;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .panel {
+            overflow-y: auto;
+            height: 100vh;
+        }
+
+        /* ===== Left Panel: Filters ===== */
+        .panel-left {
+            background: #ffffff;
+            border-right: 1px solid #ddd;
+            padding: 14px 16px;
+        }
+
+        .panel-left h2 {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 14px;
+            color: #5a3a64;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #8d5a99;
+        }
+
+        .filter-group {
+            margin-bottom: 18px;
+        }
+
+        .filter-group h3 {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .filter-actions button {
+            font-size: 11px;
+            padding: 3px 10px;
+            border: 1px solid #ccc;
+            background: #fafafa;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #555;
+            transition: background 0.15s;
+        }
+
+        .filter-actions button:hover {
+            background: #ede0ee;
+            border-color: #8d5a99;
+            color: #5a3a64;
+        }
+
+        .filter-list {
+            list-style: none;
+        }
+
+        .filter-list li {
+            padding: 3px 0;
+            font-size: 13px;
+        }
+
+        .filter-list label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .filter-list input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+            accent-color: #8d5a99;
+        }
+
+        .record-count {
+            margin-top: 14px;
+            padding: 10px;
+            background: #f0e8f0;
+            border: 1px solid #d0c0d8;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: #5a3a64;
+        }
+
+        /* ===== Center Panel: Map ===== */
+        .panel-center {
+            position: relative;
+            overflow: hidden;
+            padding: 0;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #fff;
+        }
+
+        /* ===== Right Panel: Photo + Metadata ===== */
+        .panel-right {
+            background: #ffffff;
+            border-left: 1px solid #ddd;
+            padding: 14px 16px;
+        }
+
+        .detail-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            color: #aaa;
+        }
+
+        .detail-empty .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .detail-empty p {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .detail-content { display: none; }
+        .detail-content.active { display: block; }
+
+        .detail-file-name {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #5a3a64;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #8d5a99;
+        }
+
+        .detail-photo {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            border: 1px solid #e0e0e0;
+            display: block;
+        }
+
+        .detail-meta table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .detail-meta th {
+            text-align: left;
+            font-size: 12px;
+            color: #888;
+            padding: 5px 8px 5px 0;
+            width: 38%;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+
+        .detail-meta td {
+            font-size: 13px;
+            padding: 5px 0 5px 8px;
+            color: #333;
+            vertical-align: top;
+            line-height: 1.5;
+        }
+
+        .detail-meta tr {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .detail-meta tr:last-child { border-bottom: none; }
+
+        /* ===== Custom Marker Icons ===== */
+        .custom-marker-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+        }
+
+        .custom-marker {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: rgba(141, 90, 153, 1.0);
+            border: 1.5px solid rgba(35, 35, 35, 0.7);
+            transition: width 0.2s, height 0.2s, background 0.2s, border 0.2s;
+            cursor: pointer;
+            position: relative;
+            z-index: 2;
+        }
+
+        .custom-marker.selected {
+            width: 20px;
+            height: 20px;
+            background: #ff9800;
+            border: 2.5px solid #d84315;
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+        }
+
+        .custom-marker.selected::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 2px solid rgba(255, 152, 0, 0.5);
+            animation: pulse-ring 1.5s ease-out infinite;
+            z-index: 1;
+        }
+
+        @keyframes pulse-ring {
+            0%   { width: 20px; height: 20px; opacity: 0.8; }
+            100% { width: 40px; height: 40px; opacity: 0; }
+        }
+
+        /* ===== Leaflet overrides ===== */
+        .leaflet-container { background: #fff; }
+        .leaflet-tooltip {
+            font-size: 12px;
+            padding: 3px 8px;
+            background: rgba(90, 58, 100, 0.9);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+        }
+        .leaflet-tooltip-top:before { border-top-color: rgba(90, 58, 100, 0.9); }
+
+        /* ===== Responsive: Tablet ===== */
+        @media (max-width: 1024px) {
+            .app-container {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto 1fr;
+                grid-template-areas:
+                    "left  left"
+                    "center right";
+            }
+            .panel-left {
+                grid-area: left;
+                height: auto;
+                max-height: 200px;
+                border-right: none;
+                border-bottom: 1px solid #ddd;
+            }
+            #filterContainer {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 16px;
+            }
+            .filter-group {
+                flex: 1;
+                min-width: 180px;
+                margin-bottom: 0;
+            }
+            .record-count { margin-top: 6px; }
+            .panel-center { grid-area: center; }
+            .panel-right { grid-area: right; }
+        }
+
+        /* ===== Responsive: Mobile ===== */
+        @media (max-width: 768px) {
+            .app-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 55vh auto;
+                grid-template-areas:
+                    "left"
+                    "center"
+                    "right";
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+            html, body { overflow: auto; }
+            .panel-left {
+                grid-area: left;
+                max-height: 220px;
+                border-bottom: 1px solid #ddd;
+            }
+            #filterContainer { flex-wrap: wrap; }
+            .panel-center {
+                grid-area: center;
+                height: 55vh;
+            }
+            .panel-right {
+                grid-area: right;
+                max-height: none;
+                border-left: none;
+                border-top: 1px solid #ddd;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- ===== Left: Filters ===== -->
+        <div class="panel panel-left">
+            <h2>篩選條件</h2>
+            <div id="filterContainer"></div>
+            <div class="record-count" id="recordCount">顯示 0 / 0 筆記錄</div>
+        </div>
+
+        <!-- ===== Center: Map ===== -->
+        <div class="panel panel-center">
+            <div id="map"></div>
+        </div>
+
+        <!-- ===== Right: Photo + Metadata ===== -->
+        <div class="panel panel-right">
+            <div class="detail-empty" id="detailEmpty">
+                <div class="icon">&#128247;</div>
+                <p>點選地圖上的標記<br>以查看照片與詮釋資料</p>
+            </div>
+            <div class="detail-content" id="detailContent">
+                <div class="detail-file-name" id="detailFileName"></div>
+                <img class="detail-photo" id="detailPhoto" src="" alt="">
+                <div class="detail-meta" id="detailMeta"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/leaflet.js"></script>
+    <script src="js/leaflet.markercluster.js"></script>
+    <script src="data/B24_week5_table_tutorial_path_2.js"></script>
+    <script>
+    (function () {
+        "use strict";
+
+        /* ================================================================
+           Data source — directly from window.json_B24_week5_table_tutorial_path_2
+           ================================================================ */
+        var geojson = window.json_B24_week5_table_tutorial_path_2;
+        var features = geojson.features;
+
+        /* ================================================================
+           Map initialisation — same bounds & raster as original index.html
+           ================================================================ */
+        var map = L.map("map", {
+            zoomControl: true,
+            maxZoom: 28,
+            minZoom: 1
+        }).fitBounds([
+            [22.265955293458198, 113.88576962843332],
+            [22.318781585208882, 113.97202023499788]
+        ]);
+
+        /* --- Raster: omp100_2025_clipped_0.png (original bounds) --- */
+        var rasterImg  = "data/omp100_2025_clipped_0.png";
+        var rasterBounds = [
+            [22.258713230084844, 113.87447498509259],
+            [22.33364164443673,  113.97475724974854]
+        ];
+        L.imageOverlay(rasterImg, rasterBounds).addTo(map);
+
+        /* ================================================================
+           Marker cluster group
+           ================================================================ */
+        var clusterGroup = L.markerClusterGroup({
+            showCoverageOnHover: false,
+            spiderfyDistanceMultiplier: 2,
+            maxClusterRadius: 40
+        });
+        map.addLayer(clusterGroup);
+
+        /* ================================================================
+           Helper: convert photo_path to images/ relative URL
+           Same logic as original index.html:
+           replace [\, /, :] → _  then prepend images/
+           ================================================================ */
+        function photoUrl(photoPath) {
+            if (!photoPath) return "";
+            var fname = String(photoPath).replace(/[\\/:]/g, "_").trim();
+            return "images/" + fname;
+        }
+
+        /* ================================================================
+           Helper: create divIcon for markers
+           ================================================================ */
+        function makeIcon(selected) {
+            return L.divIcon({
+                className: "",
+                html:
+                    '<div class="custom-marker-wrapper">' +
+                    '<div class="custom-marker' + (selected ? " selected" : "") +
+                    '"></div></div>',
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+        }
+
+        /* ================================================================
+           Create markers from features
+           ================================================================ */
+        var markers = [];        // all marker references
+        var selectedMarker = null;
+
+        features.forEach(function (feature, idx) {
+            var coords = feature.geometry.coordinates;   // [lng, lat]
+            var latlng = [coords[1], coords[0]];
+
+            var marker = L.marker(latlng, { icon: makeIcon(false) });
+
+            marker._featureIndex = idx;
+            marker._feature = feature;
+
+            var p = feature.properties;
+            if (p.place_name) {
+                marker.bindTooltip(p.place_name, {
+                    offset: [0, -16],
+                    direction: "top"
+                });
+            }
+
+            marker.on("click", function () {
+                selectMarker(marker);
+            });
+
+            markers.push(marker);
+            clusterGroup.addLayer(marker);
+        });
+
+        /* ================================================================
+           Marker selection — highlight + update right panel
+           ================================================================ */
+        var elEmpty      = document.getElementById("detailEmpty");
+        var elContent    = document.getElementById("detailContent");
+        var elFileName   = document.getElementById("detailFileName");
+        var elPhoto      = document.getElementById("detailPhoto");
+        var elMeta       = document.getElementById("detailMeta");
+
+        function selectMarker(marker) {
+            /* restore previous */
+            if (selectedMarker && selectedMarker !== marker) {
+                selectedMarker.setIcon(makeIcon(false));
+            }
+            selectedMarker = marker;
+            marker.setIcon(makeIcon(true));
+
+            /* show detail */
+            var p = marker._feature.properties;
+
+            elEmpty.style.display = "none";
+            elContent.classList.add("active");
+
+            elFileName.textContent = p.file_name || "";
+            elPhoto.src = photoUrl(p.photo_path);
+            elPhoto.alt = p.file_name || "";
+
+            /* only the requested metadata fields */
+            var fields = [
+                ["place_name",          "地點名稱"],
+                ["capture_date",        "拍攝日期"],
+                ["photo_subject",       "拍攝主題"],
+                ["direction",           "拍攝方向"],
+                ["location_precision",  "位置精度"],
+                ["location_source",     "位置來源"],
+                ["notes",               "備註"],
+                ["location_note",       "位置說明"]
+            ];
+
+            var html = "<table>";
+            fields.forEach(function (f) {
+                var val = p[f[0]];
+                if (val !== null && val !== undefined && String(val).length > 0) {
+                    html += "<tr><th>" + f[1] + "</th><td>" +
+                            escapeHtml(String(val)) + "</td></tr>";
+                }
+            });
+            html += "</table>";
+            elMeta.innerHTML = html;
+
+            /* mobile: scroll to detail panel */
+            if (window.innerWidth <= 768) {
+                var right = document.querySelector(".panel-right");
+                if (right) right.scrollIntoView({ behavior: "smooth" });
+            }
+        }
+
+        function escapeHtml(str) {
+            var d = document.createElement("div");
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        /* ================================================================
+           Filters — dynamically built from feature properties
+           ================================================================ */
+        var filterFields = [
+            { key: "place_name",          label: "地點名稱" },
+            { key: "photo_subject",       label: "拍攝主題" },
+            { key: "location_precision",  label: "位置精度" }
+        ];
+
+        /* extract unique values */
+        var filterValues = {};
+        filterFields.forEach(function (f) {
+            var seen = [];
+            features.forEach(function (feat) {
+                var v = feat.properties[f.key];
+                if (v !== null && v !== undefined && seen.indexOf(v) === -1)
+                    seen.push(v);
+            });
+            seen.sort();
+            filterValues[f.key] = seen;
+        });
+
+        /* build filter DOM */
+        var container = document.getElementById("filterContainer");
+
+        filterFields.forEach(function (f) {
+            var group = document.createElement("div");
+            group.className = "filter-group";
+
+            var h3 = document.createElement("h3");
+            h3.textContent = f.label;
+            group.appendChild(h3);
+
+            var actions = document.createElement("div");
+            actions.className = "filter-actions";
+
+            var btnAll = document.createElement("button");
+            btnAll.textContent = "全選";
+            btnAll.type = "button";
+            btnAll.addEventListener("click", function () {
+                group.querySelectorAll('input[type="checkbox"]')
+                     .forEach(function (cb) { cb.checked = true; });
+                applyFilters();
+            });
+
+            var btnClear = document.createElement("button");
+            btnClear.textContent = "清除";
+            btnClear.type = "button";
+            btnClear.addEventListener("click", function () {
+                group.querySelectorAll('input[type="checkbox"]')
+                     .forEach(function (cb) { cb.checked = false; });
+                applyFilters();
+            });
+
+            actions.appendChild(btnAll);
+            actions.appendChild(btnClear);
+            group.appendChild(actions);
+
+            var ul = document.createElement("ul");
+            ul.className = "filter-list";
+
+            filterValues[f.key].forEach(function (val) {
+                var li = document.createElement("li");
+                var lbl = document.createElement("label");
+                var cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.checked = true;
+                cb.value = val;
+                cb.setAttribute("data-field", f.key);
+                cb.addEventListener("change", applyFilters);
+                lbl.appendChild(cb);
+                lbl.appendChild(document.createTextNode(" " + val));
+                li.appendChild(lbl);
+                ul.appendChild(li);
+            });
+
+            group.appendChild(ul);
+            container.appendChild(group);
+        });
+
+        /* ================================================================
+           Filter logic
+           ================================================================ */
+        function applyFilters() {
+            var checked = {};
+            filterFields.forEach(function (f) {
+                checked[f.key] = [];
+                var cbs = document.querySelectorAll(
+                    'input[type="checkbox"][data-field="' + f.key + '"]'
+                );
+                cbs.forEach(function (cb) {
+                    if (cb.checked) checked[f.key].push(cb.value);
+                });
+            });
+
+            var visible = 0;
+
+            markers.forEach(function (marker) {
+                var p = marker._feature.properties;
+                var show = true;
+
+                filterFields.forEach(function (f) {
+                    var val = String(p[f.key]);
+                    if (checked[f.key].indexOf(val) === -1) show = false;
+                });
+
+                if (show) {
+                    if (!clusterGroup.hasLayer(marker))
+                        clusterGroup.addLayer(marker);
+                    visible++;
+                } else {
+                    if (clusterGroup.hasLayer(marker)) {
+                        clusterGroup.removeLayer(marker);
+                    }
+                    if (selectedMarker === marker) {
+                        selectedMarker.setIcon(makeIcon(false));
+                        selectedMarker = null;
+                        elEmpty.style.display = "";
+                        elContent.classList.remove("active");
+                    }
+                }
+            });
+
+            document.getElementById("recordCount").textContent =
+                "顯示 " + visible + " / " + features.length + " 筆記錄";
+        }
+
+        /* ================================================================
+           Ensure map resizes when container changes (CSS grid)
+           ================================================================ */
+        if (window.ResizeObserver) {
+            var ro = new ResizeObserver(function () { map.invalidateSize(); });
+            ro.observe(document.getElementById("map"));
+        }
+        window.addEventListener("resize", function () {
+            setTimeout(function () { map.invalidateSize(); }, 100);
+        });
+
+        /* run once at startup */
+        applyFilters();
+    })();
+    </script>
+</body>
+</html>
